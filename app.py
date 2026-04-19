@@ -93,6 +93,7 @@ def process_video(video_path: str, preset: str, nr_strength_pct: float):
     static_clean = os.path.join(work_dir, "static_clean.wav")
     post_proc    = os.path.join(work_dir, "post_proc.wav")
     output_video = os.path.join(work_dir, f"cleaned_{base}.mp4")
+    normalized   = os.path.join(work_dir, "normalized.wav")
 
     log: list[str] = []
 
@@ -137,8 +138,15 @@ def process_video(video_path: str, preset: str, nr_strength_pct: float):
             raise RuntimeError(msg)
         L(f"    ✔  {msg}")
 
+        # ── Stage 5: Loudness normalization ──────────────────────────────
+        L("🔊  Normalizing speech loudness to -16 LUFS...")
+        ok, msg = proc.normalize_loudness(post_proc, normalized, target_lufs=-16.0)
+        if not ok:
+            raise RuntimeError(msg)
+        L(f"    ✔  {msg}")
+
         L("🎬  Muxing enhanced audio back into video...")
-        ok, msg = proc.mux_video(video_path, post_proc, output_video)
+        ok, msg = proc.mux_video(video_path, normalized, output_video)
         if not ok:
             raise RuntimeError(msg)
         L(f"    ✔  {msg}")
@@ -152,7 +160,7 @@ def process_video(video_path: str, preset: str, nr_strength_pct: float):
         return None, "\n".join(log)
 
     finally:
-        for tmp in [extracted, enhanced, static_clean, post_proc]:
+        for tmp in [extracted, enhanced, static_clean, post_proc, normalized]:
             try:
                 if os.path.exists(tmp):
                     os.remove(tmp)

@@ -567,6 +567,75 @@ class AudioProcessor:
         except Exception as e:
             return False, f"Post-processing error: {str(e)}"
 
+
+    # ------------------------------------------------------------------
+    # Loudness normalization
+    # ------------------------------------------------------------------
+
+    def normalize_loudness(
+        self,
+        input_path: str,
+        output_path: str,
+        target_lufs: float = -16.0,
+    ) -> Tuple[bool, str]:
+        """
+        Normalize audio loudness to target LUFS using ffmpeg's loudnorm filter.
+
+        -16 LUFS = loud/present (YouTube, podcast standard)
+        -23 LUFS = broadcast standard (EBU R128, quieter)
+        """
+        try:
+            import json, re
+            ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+
+            # Pass 1: measure actual loudness
+            measure_cmd = [
+                ffmpeg_bin, "-y",
+                "-i", input_path,
+                "-af", f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11:print_format=json",
+                "-f", "null", "-",
+            ]
+            result = subprocess.run(
+                measure_cmd, capture_output=True, text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+
+            # Parse measured values from stderr
+            json_match = re.search(r'\{[^{}]+\}', result.stderr, re.DOTALL)
+            if json_match:
+                stats = json.loads(json_match.group())
+                measured_i     = stats.get("input_i",      "-70")
+                measured_tp    = stats.get("input_tp",     "-70")
+                measured_lra   = stats.get("input_lra",    "0")
+                measured_thresh = stats.get("input_thresh", "-70")
+                offset         = stats.get("target_offset", "0")
+                norm_filter = (
+                    f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11:"
+                    f"measured_I={measured_i}:measured_TP={measured_tp}:"
+                    f"measured_LRA={measured_lra}:measured_thresh={measured_thresh}:"
+                    f"offset={offset}:linear=true"
+                )
+            else:
+                norm_filter = f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11"
+
+            apply_cmd = [
+                ffmpeg_bin, "-y",
+                "-i", input_path,
+                "-af", norm_filter,
+                output_path,
+            ]
+            result2 = subprocess.run(
+                apply_cmd, capture_output=True, text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            if result2.returncode != 0:
+                return False, f"Loudness normalization failed: {result2.stderr}"
+
+            return True, f"Speech loudness normalized to {target_lufs} LUFS"
+
+        except Exception as e:
+            return False, f"Loudness normalization error: {str(e)}"
+
     # ------------------------------------------------------------------
     # Muxing
     # ------------------------------------------------------------------

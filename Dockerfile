@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir \
     "starlette==0.41.3" \
     "fastapi==0.115.12" \
     "gradio==4.44.1" \
-    "gradio-client==0.9.0" \
+    "gradio-client==1.3.0" \
     "uvicorn==0.29.0" \
     "aiofiles==23.2.1" \
     "httpx==0.27.2" \
